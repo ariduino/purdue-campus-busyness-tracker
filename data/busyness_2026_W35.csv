@@ -1,0 +1,10 @@
+Timestamp_EST,Location_ID,Location_Name,Current_Busyness_Pct,Source_Status,Google_Place_ID,Source_URL
+2026-08-25 17:09:20,wiley-dining-court,Wiley Dining Court,,actor_error:ApifyApiError,,
+2026-08-25 17:09:20,earhart-dining-court,Earhart Dining Court,,actor_error:ApifyApiError,,
+2026-08-25 17:09:20,ford-dining-court,Ford Dining Court,,actor_error:ApifyApiError,,
+2026-08-25 17:09:20,windsor-dining-court,Windsor Dining Court,,actor_error:ApifyApiError,,
+2026-08-25 17:09:20,hillenbrand-dining-court,Hillenbrand Dining Court,,actor_error:ApifyApiError,,
+2026-08-25 17:09:20,bechtel-innovation-design-center,Bechtel Innovation Design Center (BIDC),,actor_error:ApifyApiError,,
+2026-08-25 17:09:20,corec,France A. Córdova Recreational Sports Center (CoRec),,actor_error:ApifyApiError,,
+2026-08-25 17:09:20,pmu-food-court,Purdue Memorial Union (PMU) Food Court,,actor_error:ApifyApiError,,
+2026-08-25 17:09:20,chick-fil-a-frieda-parker,Chick-fil-A (Frieda Parker Hall),,actor_error:ApifyApiError,,
