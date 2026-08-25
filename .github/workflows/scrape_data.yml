@@ -10,6 +10,11 @@ on:
         required: false
         type: boolean
         default: false
+      location_id:
+        description: "Optional internal location ID for a one-location validation run"
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -31,9 +36,17 @@ jobs:
       - name: Collect busyness data
         env:
           APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
-        run: >-
-          python scrape_dining.py
-          ${{ inputs.accept_identifiers && '--accept-discovered-identifiers' || '' }}
+          ACCEPT_IDENTIFIERS: ${{ inputs.accept_identifiers }}
+          VALIDATION_LOCATION_ID: ${{ inputs.location_id }}
+        run: |
+          args=()
+          if [ "$ACCEPT_IDENTIFIERS" = "true" ]; then
+            args+=(--accept-discovered-identifiers)
+          fi
+          if [ -n "$VALIDATION_LOCATION_ID" ]; then
+            args+=(--location-id "$VALIDATION_LOCATION_ID")
+          fi
+          python scrape_dining.py "${args[@]}"
       - name: Commit collected data
         run: |
           git config user.name "Purdue Busyness Bot"

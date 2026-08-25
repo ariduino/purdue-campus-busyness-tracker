@@ -32,12 +32,14 @@ class PipelineTests(unittest.TestCase):
         self.assertIs(resolved, item)
         self.assertEqual(status, "matched_google_place_id")
 
-    def test_current_actor_input_uses_only_documented_place_urls(self):
+    def test_compass_actor_input_uses_direct_urls_and_detail_pages(self):
         actor_input = pipeline.build_actor_input(self.config["locations"][:2])
-        self.assertEqual(actor_input["placeUrls"], [item["url"] for item in self.config["locations"][:2]])
+        self.assertEqual(actor_input["startUrls"], [{"url": item["url"]} for item in self.config["locations"][:2]])
+        self.assertEqual(actor_input["maxCrawledPlacesPerSearch"], 1)
+        self.assertTrue(actor_input["scrapePlaceDetailPage"])
+        self.assertFalse(actor_input["scrapeReviewsPersonalData"])
         self.assertEqual(actor_input["language"], "en")
-        self.assertEqual(actor_input["country"], "us")
-        self.assertNotIn("startUrls", actor_input)
+        self.assertNotIn("placeUrls", actor_input)
 
     def test_actor_error_redacts_a_token(self):
         message = pipeline.safe_actor_error(RuntimeError("token=secret-value request rejected"))
@@ -69,6 +71,12 @@ class PipelineTests(unittest.TestCase):
         now = datetime(2026, 8, 25, 12, 0, tzinfo=pipeline.TIMEZONE)
         rows = pipeline.status_rows(now, self.config["locations"][:1], "actor_returned_zero_results")
         self.assertEqual(rows[0]["Source_Status"], "actor_returned_zero_results")
+
+    def test_single_location_selection(self):
+        selected = pipeline.select_locations(self.config["locations"], "wiley-dining-court")
+        self.assertEqual([item["id"] for item in selected], ["wiley-dining-court"])
+        with self.assertRaises(pipeline.ConfigurationError):
+            pipeline.select_locations(self.config["locations"], "not-a-location")
 
     def test_csv_is_created_once_with_headers(self):
         rows = [{field: "" for field in pipeline.CSV_FIELDS}]

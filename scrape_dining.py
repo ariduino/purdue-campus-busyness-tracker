@@ -25,7 +25,7 @@ CONFIG_PATH = ROOT / "config.json"
 REGISTRY_PATH = ROOT / "location_registry.json"
 DATA_DIR = ROOT / "data"
 TIMEZONE = ZoneInfo("America/Indiana/Indianapolis")
-ACTOR_ID = "seemuapps/google-maps-popular-times-scraper"
+ACTOR_ID = "compass/crawler-google-places"
 CSV_FIELDS = [
     "Timestamp_EST",
     "Location_ID",
@@ -159,11 +159,16 @@ def candidate_busyness(item: dict[str, Any]) -> int | None:
 
 
 def build_actor_input(locations: list[dict[str, Any]]) -> dict[str, Any]:
-    """Minimal input supported by the dedicated live-busyness actor."""
+    """Use direct place URLs and only the detail fields required for busyness."""
     return {
-        "placeUrls": [location["url"] for location in locations],
+        "startUrls": [{"url": location["url"]} for location in locations],
+        "maxCrawledPlacesPerSearch": 1,
         "language": "en",
-        "country": "us",
+        "scrapePlaceDetailPage": True,
+        "maxReviews": 0,
+        "maxImages": 0,
+        "scrapeReviewsPersonalData": False,
+        "scrapeContacts": False,
     }
 
 
@@ -276,6 +281,7 @@ def log_actor_diagnostics(items: list[dict[str, Any]]) -> None:
     print(f"Apify result count: {len(items)}")
     for index, item in enumerate(items[:20], start=1):
         summary = {
+            "fields": sorted(item)[:50],
             "place_id": candidate_place_id(item),
             "name": first_value(item, NAME_FIELDS),
             "address": first_value(item, ADDRESS_FIELDS),
@@ -322,30 +328,41 @@ def call_actor(locations: list[dict[str, Any]]) -> list[dict[str, Any]]:
         raise ActorExecutionError(type(error).__name__) from error
 
 
+def select_locations(locations: list[dict[str, Any]], location_id: str | None) -> list[dict[str, Any]]:
+    if location_id is None:
+        return locations
+    selected = [location for location in locations if location["id"] == location_id]
+    if not selected:
+        raise ConfigurationError(f"Unknown location ID: {location_id}")
+    return selected
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--accept-discovered-identifiers", action="store_true", help="Commit strict bootstrap Google IDs after manual review")
+    parser.add_argument("--location-id", help="Collect one configured location for a low-cost validation run")
     args = parser.parse_args(argv)
     try:
         config = load_json(CONFIG_PATH)
         registry = load_json(REGISTRY_PATH)
         validate_config(config)
         validate_registry(registry, config)
+        locations = select_locations(config["locations"], args.location_id)
         now = datetime.now(TIMEZONE)
         if not is_active(now, config):
             print(f"Outside active tracking hours at {now.isoformat()}; exiting successfully.")
             return 0
         try:
-            items = call_actor(config["locations"])
+            items = call_actor(locations)
         except ActorExecutionError as error:
-            rows, discoveries = error_rows(now, config["locations"], str(error)), {}
+            rows, discoveries = error_rows(now, locations, str(error)), {}
             print("Writing unavailable rows so this remote failure is visible in the historical dataset.", file=sys.stderr)
         else:
             log_actor_diagnostics(items)
             if not items:
-                rows, discoveries = status_rows(now, config["locations"], "actor_returned_zero_results"), {}
+                rows, discoveries = status_rows(now, locations, "actor_returned_zero_results"), {}
             else:
-                rows, discoveries = build_rows(now, config["locations"], registry, items)
+                rows, discoveries = build_rows(now, locations, registry, items)
         append_rows(weekly_csv_path(now), rows)
         if discoveries:
             print("Discovered unverified Google identifiers: " + ", ".join(sorted(discoveries)))
