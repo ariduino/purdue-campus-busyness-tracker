@@ -90,10 +90,20 @@ def validate_config(config: dict[str, Any]) -> None:
         if not isinstance(location.get("name"), str) or not location["name"].strip():
             raise ConfigurationError(f"Location {location_id} needs a name")
         url = location.get("url")
-        if not isinstance(url, str) or urlparse(url).scheme != "https" or not urlparse(url).netloc:
-            raise ConfigurationError(f"Location {location_id} needs an HTTPS URL")
+        if url is not None and (not isinstance(url, str) or urlparse(url).scheme != "https" or not urlparse(url).netloc):
+            raise ConfigurationError(f"Location {location_id} has an invalid optional URL")
+        if not isinstance(location.get("search_query"), str) or not location["search_query"].strip():
+            raise ConfigurationError(f"Location {location_id} needs a search_query")
+        if not isinstance(location.get("location_query"), str) or not location["location_query"].strip():
+            raise ConfigurationError(f"Location {location_id} needs a location_query")
+        match_names = location.get("match_names")
+        if not isinstance(match_names, list) or not match_names or not all(isinstance(name, str) and name.strip() for name in match_names):
+            raise ConfigurationError(f"Location {location_id} needs non-empty match_names")
         if not isinstance(location.get("address_hint"), str) or not location["address_hint"].strip():
             raise ConfigurationError(f"Location {location_id} needs an address_hint")
+        tokens = location.get("address_match_tokens")
+        if not isinstance(tokens, list) or not tokens or not all(isinstance(token, str) and token.strip() for token in tokens):
+            raise ConfigurationError(f"Location {location_id} needs address_match_tokens")
 
 
 def validate_registry(registry: dict[str, Any], config: dict[str, Any]) -> None:
@@ -159,10 +169,15 @@ def candidate_busyness(item: dict[str, Any]) -> int | None:
 
 
 def build_actor_input(locations: list[dict[str, Any]]) -> dict[str, Any]:
-    """Use direct place URLs and only the detail fields required for busyness."""
+    """Search exact facilities in one city before their stable IDs have been captured."""
+    location_queries = {location["location_query"] for location in locations}
+    if len(location_queries) != 1:
+        raise ConfigurationError("A Compass run can use only one location_query")
     return {
-        "startUrls": [{"url": location["url"]} for location in locations],
+        "searchStringsArray": [location["search_query"] for location in locations],
+        "locationQuery": location_queries.pop(),
         "maxCrawledPlacesPerSearch": 1,
+        "searchMatching": "only_includes",
         "language": "en",
         "scrapePlaceDetailPage": True,
         "maxReviews": 0,
@@ -184,13 +199,14 @@ def safe_actor_error(error: Exception) -> str:
 def bootstrap_matches(location: dict[str, Any], item: dict[str, Any]) -> bool:
     """Allow discovery only for one strict, reviewable URL/name/address match."""
     result_url = candidate_url(item)
-    if result_url and normalized_url(result_url) == normalized_url(location["url"]):
+    expected_url = location.get("url")
+    if expected_url and result_url and normalized_url(result_url) == normalized_url(expected_url):
         return True
     result_name = normalized_text(first_value(item, NAME_FIELDS))
-    expected_name = normalized_text(location["name"])
+    expected_names = {normalized_text(location["name"]), *(normalized_text(name) for name in location["match_names"])}
     address = normalized_text(first_value(item, ADDRESS_FIELDS))
-    hint_tokens = [token for token in normalized_text(location["address_hint"]).split() if len(token) > 2]
-    return result_name == expected_name and bool(address) and any(token in address for token in hint_tokens)
+    required_tokens = [normalized_text(token) for token in location["address_match_tokens"]]
+    return result_name in expected_names and bool(address) and all(token in address for token in required_tokens)
 
 
 def resolve_location(location: dict[str, Any], registry_entry: dict[str, Any], items: list[dict[str, Any]]) -> tuple[dict[str, Any] | None, str]:
@@ -228,7 +244,7 @@ def build_rows(now: datetime, locations: list[dict[str, Any]], registry: dict[st
         source_url = candidate_url(item) if item else None
         busyness = candidate_busyness(item) if item else None
         if item and status == "unverified_identifier_candidate" and place_id:
-            discoveries[location["id"]] = {"google_place_id": place_id, "canonical_url": source_url or location["url"]}
+            discoveries[location["id"]] = {"google_place_id": place_id, "canonical_url": source_url}
         if item and busyness is None:
             status = f"{status}:live_busyness_unavailable"
         rows.append({

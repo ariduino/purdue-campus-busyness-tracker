@@ -32,14 +32,16 @@ class PipelineTests(unittest.TestCase):
         self.assertIs(resolved, item)
         self.assertEqual(status, "matched_google_place_id")
 
-    def test_compass_actor_input_uses_direct_urls_and_detail_pages(self):
+    def test_compass_actor_input_uses_precise_searches_and_detail_pages(self):
         actor_input = pipeline.build_actor_input(self.config["locations"][:2])
-        self.assertEqual(actor_input["startUrls"], [{"url": item["url"]} for item in self.config["locations"][:2]])
+        self.assertEqual(actor_input["searchStringsArray"], [item["search_query"] for item in self.config["locations"][:2]])
+        self.assertEqual(actor_input["locationQuery"], "West Lafayette, IN")
         self.assertEqual(actor_input["maxCrawledPlacesPerSearch"], 1)
+        self.assertEqual(actor_input["searchMatching"], "only_includes")
         self.assertTrue(actor_input["scrapePlaceDetailPage"])
         self.assertFalse(actor_input["scrapeReviewsPersonalData"])
         self.assertEqual(actor_input["language"], "en")
-        self.assertNotIn("placeUrls", actor_input)
+        self.assertNotIn("startUrls", actor_input)
 
     def test_actor_error_redacts_a_token(self):
         message = pipeline.safe_actor_error(RuntimeError("token=secret-value request rejected"))
@@ -48,7 +50,13 @@ class PipelineTests(unittest.TestCase):
 
     def test_bootstrap_is_strict_and_discovery_needs_approval(self):
         location = self.config["locations"][0]
-        item = {"placeId": "new-google-id", "url": location["url"], "currentBusynessPct": 52}
+        item = {
+            "placeId": "new-google-id",
+            "placeUrl": "https://www.google.com/maps/place/Wiley+Dining+Court/",
+            "placeName": "Wiley Dining Court",
+            "placeAddress": "498 S Martin Jischke Drive, West Lafayette, IN 47906",
+            "currentBusynessPct": 52,
+        }
         rows, discoveries = pipeline.build_rows(datetime(2026, 8, 25, 12, 0, tzinfo=pipeline.TIMEZONE), [location], {"locations": {location["id"]: {"google_place_id": None, "canonical_url": None}}}, [item])
         self.assertEqual(rows[0]["Source_Status"], "unverified_identifier_candidate")
         self.assertEqual(discoveries[location["id"]]["google_place_id"], "new-google-id")
