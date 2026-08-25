@@ -63,6 +63,7 @@ class PipelineTests(unittest.TestCase):
             "Purdue CoRec",
             "France A Cordova Recreational Sports Center Purdue University",
         ])
+        self.assertEqual(actor_input["startUrls"], [{"url": "https://www.google.com/maps/search/?api=1&query=Bechtel%20Innovation%20Design%20Center%2C%201090%203rd%20Street%2C%20West%20Lafayette%2C%20IN%2047907"}])
 
     def test_actor_input_uses_saved_ids_and_searches_only_unresolved_locations(self):
         locations = self.config["locations"][:2]
@@ -106,7 +107,38 @@ class PipelineTests(unittest.TestCase):
         item = {"placeId": "known", "currentBusynessPct": None}
         rows, _ = pipeline.build_rows(datetime(2026, 8, 25, 12, 0, tzinfo=pipeline.TIMEZONE), [location], {"locations": {location["id"]: {"google_place_id": "known", "canonical_url": None}}}, [item])
         self.assertEqual(rows[0]["Current_Busyness_Pct"], "")
-        self.assertIn("live_busyness_unavailable", rows[0]["Source_Status"])
+        self.assertIn("live_data_not_published_by_google", rows[0]["Source_Status"])
+
+    def test_nested_live_busyness_is_extracted_without_using_historical_values(self):
+        self.assertEqual(pipeline.candidate_busyness({"popularTimes": {"livePercent": "64"}}), 64)
+        self.assertIsNone(pipeline.candidate_busyness({"popularTimes": [10, 30, 80]}))
+
+    def test_busyness_status_distinguishes_closed_and_historical_only(self):
+        self.assertEqual(pipeline.busyness_status({"isOpen": False}, "matched_google_place_id"), "matched_google_place_id:location_closed")
+        self.assertEqual(
+            pipeline.busyness_status({"popularTimes": [10, 30, 80]}, "matched_google_place_id"),
+            "matched_google_place_id:historical_popular_times_only",
+        )
+
+    def test_bidz_coordinate_match_requires_an_accepted_name(self):
+        location = next(item for item in self.config["locations"] if item["id"] == "bechtel-innovation-design-center")
+        matching = {"placeName": "BIDC", "latitude": 40.42752, "longitude": -86.91880}
+        wrong_name = {"placeName": "Other Purdue Building", "latitude": 40.42752, "longitude": -86.91880}
+        self.assertTrue(pipeline.bootstrap_matches(location, matching))
+        self.assertFalse(pipeline.bootstrap_matches(location, wrong_name))
+
+    def test_diagnostics_are_sanitized_and_persisted(self):
+        location = self.config["locations"][0]
+        registry = {"locations": {location["id"]: {"google_place_id": "known", "canonical_url": None}}}
+        item = {"placeId": "known", "currentBusynessPct": 42, "popularTimes": [10, 20], "email": "not-recorded@example.com"}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "diagnostics.jsonl"
+            pipeline.append_diagnostics(path, datetime(2026, 8, 25, 12, 0, tzinfo=pipeline.TIMEZONE), ["run-123"], [location], registry, [item])
+            record = json.loads(path.read_text())
+        projection = record["locations"][0]["matched_item"]
+        self.assertEqual(record["actor_run_ids"], ["run-123"])
+        self.assertEqual(projection["live_busyness_pct"], 42)
+        self.assertNotIn("email", projection["occupancy_fields"])
 
     def test_remote_actor_failure_creates_traceable_empty_rows(self):
         now = datetime(2026, 8, 25, 12, 0, tzinfo=pipeline.TIMEZONE)

@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import os
 import re
 import sys
@@ -40,7 +41,17 @@ PLACE_ID_FIELDS = ("googlePlaceId", "placeId", "place_id", "cid")
 URL_FIELDS = ("url", "placeUrl", "place_url", "googleMapsUrl")
 NAME_FIELDS = ("title", "name", "placeName")
 ADDRESS_FIELDS = ("address", "fullAddress", "placeAddress")
-BUSYNESS_FIELDS = ("currentBusynessPct", "popularTimesCurrent", "peopleWaiting", "popularTimesLivePercent")
+BUSYNESS_FIELDS = (
+    "currentBusynessPct",
+    "popularTimesCurrent",
+    "popularTimesLivePercent",
+    "liveBusynessPct",
+    "liveBusyness",
+    "currentPopularity",
+)
+LIVE_FIELD_MARKERS = ("live", "current")
+BUSYNESS_FIELD_MARKERS = ("busy", "popular", "occup", "crowd", "percent")
+COORDINATE_FIELDS = (("latitude", "longitude"), ("lat", "lng"), ("lat", "lon"))
 
 
 class ConfigurationError(ValueError):
@@ -98,6 +109,11 @@ def validate_config(config: dict[str, Any]) -> None:
         fallback_queries = location.get("fallback_search_queries", [])
         if not isinstance(fallback_queries, list) or not all(isinstance(query, str) and query.strip() for query in fallback_queries):
             raise ConfigurationError(f"Location {location_id} has invalid fallback_search_queries")
+        start_urls = location.get("start_urls", [])
+        if not isinstance(start_urls, list) or not all(
+            isinstance(url, str) and urlparse(url).scheme == "https" and urlparse(url).netloc for url in start_urls
+        ):
+            raise ConfigurationError(f"Location {location_id} has invalid start_urls")
         if not isinstance(location.get("location_query"), str) or not location["location_query"].strip():
             raise ConfigurationError(f"Location {location_id} needs a location_query")
         match_names = location.get("match_names")
@@ -115,6 +131,19 @@ def validate_config(config: dict[str, Any]) -> None:
         )
         if not tokens_valid and not variants_valid:
             raise ConfigurationError(f"Location {location_id} needs address_match_tokens or address_match_variants")
+        coordinates = location.get("expected_coordinates")
+        if coordinates is not None:
+            if (
+                not isinstance(coordinates, dict)
+                or not isinstance(coordinates.get("latitude"), (int, float))
+                or not isinstance(coordinates.get("longitude"), (int, float))
+                or not -90 <= coordinates["latitude"] <= 90
+                or not -180 <= coordinates["longitude"] <= 180
+            ):
+                raise ConfigurationError(f"Location {location_id} has invalid expected_coordinates")
+            tolerance = location.get("coordinate_tolerance_meters", 150)
+            if not isinstance(tolerance, (int, float)) or isinstance(tolerance, bool) or tolerance <= 0 or tolerance > 1_000:
+                raise ConfigurationError(f"Location {location_id} has invalid coordinate_tolerance_meters")
 
 
 def validate_registry(registry: dict[str, Any], config: dict[str, Any]) -> None:
@@ -166,18 +195,90 @@ def candidate_url(item: dict[str, Any]) -> str | None:
     return first_value(item, URL_FIELDS)
 
 
+def bounded_percentage(value: Any) -> int | None:
+    """Return a percentage only when the source value is an unambiguous 0–100 number."""
+    if isinstance(value, bool):
+        return None
+    try:
+        result = int(value)
+    except (TypeError, ValueError):
+        return None
+    return result if 0 <= result <= 100 else None
+
+
+def nested_live_busyness(value: Any, key: str = "") -> int | None:
+    """Find explicitly live/current busyness values without treating historical data as live."""
+    key_normalized = normalized_text(key).replace(" ", "")
+    is_live_key = any(marker in key_normalized for marker in LIVE_FIELD_MARKERS)
+    is_busyness_key = any(marker in key_normalized for marker in BUSYNESS_FIELD_MARKERS)
+    if is_live_key and is_busyness_key:
+        percentage = bounded_percentage(value)
+        if percentage is not None:
+            return percentage
+        if isinstance(value, dict):
+            for nested_key in ("percent", "percentage", "value", "current"):
+                percentage = bounded_percentage(value.get(nested_key))
+                if percentage is not None:
+                    return percentage
+    if isinstance(value, dict):
+        for nested_key, nested_value in value.items():
+            percentage = nested_live_busyness(nested_value, str(nested_key))
+            if percentage is not None:
+                return percentage
+    if isinstance(value, list):
+        for nested_value in value:
+            percentage = nested_live_busyness(nested_value, key)
+            if percentage is not None:
+                return percentage
+    return None
+
+
 def candidate_busyness(item: dict[str, Any]) -> int | None:
     for field in BUSYNESS_FIELDS:
         value = item.get(field)
-        if value is None or value == "":
-            continue
-        try:
-            result = int(value)
-        except (TypeError, ValueError):
-            continue
-        if 0 <= result <= 100:
-            return result
+        percentage = bounded_percentage(value)
+        if percentage is not None:
+            return percentage
+    return nested_live_busyness(item)
+
+
+def candidate_coordinates(item: dict[str, Any]) -> tuple[float, float] | None:
+    for latitude_field, longitude_field in COORDINATE_FIELDS:
+        latitude, longitude = item.get(latitude_field), item.get(longitude_field)
+        if isinstance(latitude, (int, float)) and isinstance(longitude, (int, float)):
+            return float(latitude), float(longitude)
+    coordinates = item.get("coordinates")
+    if isinstance(coordinates, dict):
+        return candidate_coordinates(coordinates)
     return None
+
+
+def distance_meters(first: tuple[float, float], second: tuple[float, float]) -> float:
+    """Calculate great-circle distance using the Haversine formula."""
+    latitude_1, longitude_1, latitude_2, longitude_2 = map(math.radians, (*first, *second))
+    a = math.sin((latitude_2 - latitude_1) / 2) ** 2 + math.cos(latitude_1) * math.cos(latitude_2) * math.sin((longitude_2 - longitude_1) / 2) ** 2
+    return 6_371_000 * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def candidate_is_closed(item: dict[str, Any]) -> bool:
+    for field in ("isOpen", "openNow", "isOpenNow", "currentlyOpen"):
+        if item.get(field) is False:
+            return True
+    status = normalized_text(item.get("businessStatus"))
+    return "closed" in status
+
+
+def has_historical_popular_times(item: dict[str, Any]) -> bool:
+    def contains_popular_times(value: Any, key: str = "") -> bool:
+        key_normalized = normalized_text(key).replace(" ", "")
+        if "populartime" in key_normalized and value not in (None, "", [], {}):
+            return True
+        if isinstance(value, dict):
+            return any(contains_popular_times(nested_value, str(nested_key)) for nested_key, nested_value in value.items())
+        if isinstance(value, list):
+            return any(contains_popular_times(nested_value, key) for nested_value in value)
+        return False
+    return contains_popular_times(item)
 
 
 def build_actor_input(locations: list[dict[str, Any]], registry: dict[str, Any]) -> dict[str, Any]:
@@ -190,6 +291,12 @@ def build_actor_input(locations: list[dict[str, Any]], registry: dict[str, Any])
         for location in locations
         if not registry["locations"][location["id"]].get("google_place_id")
         for query in [location["search_query"], *location.get("fallback_search_queries", [])]
+    ))
+    start_urls = list(dict.fromkeys(
+        url
+        for location in locations
+        if not registry["locations"][location["id"]].get("google_place_id")
+        for url in location.get("start_urls", [])
     ))
     place_ids = list(dict.fromkeys(
         registry["locations"][location["id"]]["google_place_id"]
@@ -213,6 +320,8 @@ def build_actor_input(locations: list[dict[str, Any]], registry: dict[str, Any])
     if search_strings:
         actor_input["searchStringsArray"] = search_strings
         actor_input["locationQuery"] = location_queries.pop()
+    if start_urls:
+        actor_input["startUrls"] = [{"url": url} for url in start_urls]
     return actor_input
 
 
@@ -237,7 +346,15 @@ def bootstrap_matches(location: dict[str, Any], item: dict[str, Any]) -> bool:
     token_variants = location.get("address_match_variants") or [location["address_match_tokens"]]
     normalized_variants = [[normalized_text(token) for token in variant] for variant in token_variants]
     address_matches = any(all(token in address for token in variant) for variant in normalized_variants)
-    return result_name in expected_names and bool(address) and address_matches
+    expected_coordinates = location.get("expected_coordinates")
+    result_coordinates = candidate_coordinates(item)
+    coordinate_matches = False
+    if expected_coordinates and result_coordinates:
+        coordinate_matches = distance_meters(
+            result_coordinates,
+            (float(expected_coordinates["latitude"]), float(expected_coordinates["longitude"])),
+        ) <= float(location.get("coordinate_tolerance_meters", 150))
+    return result_name in expected_names and ((bool(address) and address_matches) or coordinate_matches)
 
 
 def resolve_location(location: dict[str, Any], registry_entry: dict[str, Any], items: list[dict[str, Any]]) -> tuple[dict[str, Any] | None, str]:
@@ -265,6 +382,17 @@ def resolve_location(location: dict[str, Any], registry_entry: dict[str, Any], i
     return None, "no_matching_result"
 
 
+def busyness_status(item: dict[str, Any], resolution_status: str) -> str:
+    """Classify absent live data without inventing an empty or zero occupancy reading."""
+    if candidate_busyness(item) is not None:
+        return resolution_status
+    if candidate_is_closed(item):
+        return f"{resolution_status}:location_closed"
+    if has_historical_popular_times(item):
+        return f"{resolution_status}:historical_popular_times_only"
+    return f"{resolution_status}:live_data_not_published_by_google"
+
+
 def build_rows(now: datetime, locations: list[dict[str, Any]], registry: dict[str, Any], items: list[dict[str, Any]]) -> tuple[list[dict[str, str]], dict[str, dict[str, str]]]:
     rows: list[dict[str, str]] = []
     discoveries: dict[str, dict[str, str]] = {}
@@ -276,8 +404,8 @@ def build_rows(now: datetime, locations: list[dict[str, Any]], registry: dict[st
         busyness = candidate_busyness(item) if item else None
         if item and status == "unverified_identifier_candidate" and place_id:
             discoveries[location["id"]] = {"google_place_id": place_id, "canonical_url": source_url}
-        if item and busyness is None:
-            status = f"{status}:live_busyness_unavailable"
+        if item:
+            status = busyness_status(item, status)
         rows.append({
             "Timestamp_EST": timestamp,
             "Location_ID": location["id"],
@@ -323,18 +451,61 @@ def append_rows(path: Path, rows: list[dict[str, str]]) -> None:
         writer.writerows(rows)
 
 
-def log_actor_diagnostics(items: list[dict[str, Any]]) -> None:
+def diagnostic_projection(item: dict[str, Any]) -> dict[str, Any]:
+    """Keep only public identity and occupancy-related data in a durable diagnostic record."""
+    relevant_terms = ("popular", "busy", "live", "current", "open", "occup", "wait")
+    values = {
+        key: value
+        for key, value in item.items()
+        if any(term in normalized_text(key) for term in relevant_terms)
+    }
+    return {
+        "fields": sorted(item),
+        "place_id": candidate_place_id(item),
+        "name": first_value(item, NAME_FIELDS),
+        "address": first_value(item, ADDRESS_FIELDS),
+        "coordinates": candidate_coordinates(item),
+        "url": candidate_url(item),
+        "live_busyness_pct": candidate_busyness(item),
+        "is_closed": candidate_is_closed(item),
+        "has_historical_popular_times": has_historical_popular_times(item),
+        "occupancy_fields": values,
+    }
+
+
+def diagnostics_path(now: datetime) -> Path:
+    year, week, _ = now.isocalendar()
+    return DATA_DIR / f"busyness_diagnostics_{year}_W{week:02d}.jsonl"
+
+
+def append_diagnostics(path: Path, now: datetime, run_ids: list[str], locations: list[dict[str, Any]], registry: dict[str, Any], items: list[dict[str, Any]]) -> None:
+    """Persist small, sanitized records for parser and identity diagnosis across runs."""
+    DATA_DIR.mkdir(exist_ok=True)
+    resolved = []
+    for location in locations:
+        item, status = resolve_location(location, registry["locations"][location["id"]], items)
+        resolved.append({
+            "location_id": location["id"],
+            "resolution_status": status,
+            "matched_item": diagnostic_projection(item) if item else None,
+        })
+    record = {
+        "timestamp_est": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "actor_id": ACTOR_ID,
+        "actor_run_ids": run_ids,
+        "locations": resolved,
+        "unmatched_candidates": [diagnostic_projection(item) for item in items[:30]],
+    }
+    with path.open("a", encoding="utf-8") as destination:
+        destination.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def log_actor_diagnostics(items: list[dict[str, Any]], run_ids: list[str]) -> None:
     """Log a deliberately small public metadata projection for matching diagnosis."""
+    print(f"Apify run IDs: {', '.join(run_ids) if run_ids else 'unknown'}")
     print(f"Apify result count: {len(items)}")
     for index, item in enumerate(items[:20], start=1):
-        summary = {
-            "fields": sorted(item)[:50],
-            "place_id": candidate_place_id(item),
-            "name": first_value(item, NAME_FIELDS),
-            "address": first_value(item, ADDRESS_FIELDS),
-            "url": candidate_url(item),
-            "busyness_pct": candidate_busyness(item),
-        }
+        summary = diagnostic_projection(item)
         print(f"Apify result {index}: {json.dumps(summary, ensure_ascii=False)}")
     if len(items) > 20:
         print(f"Apify result diagnostics truncated: {len(items) - 20} additional records.")
@@ -349,7 +520,7 @@ def persist_discoveries(registry: dict[str, Any], discoveries: dict[str, dict[st
     return True
 
 
-def call_actor(locations: list[dict[str, Any]], registry: dict[str, Any]) -> list[dict[str, Any]]:
+def call_actor(locations: list[dict[str, Any]], registry: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
     token = os.environ.get("APIFY_API_TOKEN")
     if not token:
         raise RuntimeError("APIFY_API_TOKEN is not defined")
@@ -357,16 +528,29 @@ def call_actor(locations: list[dict[str, Any]], registry: dict[str, Any]) -> lis
         from apify_client import ApifyClient
     except ImportError as error:
         raise RuntimeError("apify-client is not installed; run pip install -r requirements.txt") from error
-    run_input = build_actor_input(locations, registry)
     try:
         client = ApifyClient(token)
-        run = client.actor(ACTOR_ID).call(run_input=run_input)
-        if run is None:
-            raise ActorExecutionError("actor_returned_no_run")
-        dataset_id = getattr(run, "default_dataset_id", None) or run.get("defaultDatasetId")
-        if not dataset_id:
-            raise ActorExecutionError("actor_returned_no_dataset")
-        return client.dataset(dataset_id).list_items().items
+        # Keep direct-ID collection independent from unresolved discovery URLs.
+        # The actor supports both inputs, but separate calls remove ambiguity
+        # about source-input precedence and bound BIDC experimentation.
+        saved = [location for location in locations if registry["locations"][location["id"]].get("google_place_id")]
+        unresolved = [location for location in locations if not registry["locations"][location["id"]].get("google_place_id")]
+        items: list[dict[str, Any]] = []
+        run_ids: list[str] = []
+        for batch in (saved, unresolved):
+            if not batch:
+                continue
+            run = client.actor(ACTOR_ID).call(run_input=build_actor_input(batch, registry))
+            if run is None:
+                raise ActorExecutionError("actor_returned_no_run")
+            dataset_id = getattr(run, "default_dataset_id", None) or run.get("defaultDatasetId")
+            if not dataset_id:
+                raise ActorExecutionError("actor_returned_no_dataset")
+            run_id = getattr(run, "id", None) or run.get("id")
+            if run_id:
+                run_ids.append(str(run_id))
+            items.extend(client.dataset(dataset_id).list_items().items)
+        return items, run_ids
     except ActorExecutionError:
         raise
     except Exception as error:
@@ -400,12 +584,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Outside active tracking hours at {now.isoformat()}; exiting successfully.")
             return 0
         try:
-            items = call_actor(locations, registry)
+            items, run_ids = call_actor(locations, registry)
         except ActorExecutionError as error:
             rows, discoveries = error_rows(now, locations, str(error)), {}
             print("Writing unavailable rows so this remote failure is visible in the historical dataset.", file=sys.stderr)
         else:
-            log_actor_diagnostics(items)
+            log_actor_diagnostics(items, run_ids)
+            append_diagnostics(diagnostics_path(now), now, run_ids, locations, registry, items)
             if not items:
                 rows, discoveries = status_rows(now, locations, "actor_returned_zero_results"), {}
             else:
