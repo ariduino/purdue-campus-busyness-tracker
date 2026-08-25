@@ -37,3 +37,12 @@ Timestamp_EST,Location_ID,Location_Name,Current_Busyness_Pct,Source_Status,Googl
 2026-08-25 17:35:07,corec,France A. Córdova Recreational Sports Center (CoRec),,no_matching_result,,
 2026-08-25 17:35:07,pmu-food-court,Purdue Memorial Union (PMU) Food Court,,unverified_identifier_candidate:live_busyness_unavailable,ChIJtwn2EK7iEogRHR4eOO1RvQU,https://www.google.com/maps/search/?api=1&query=Purdue%20Memorial%20Union&query_place_id=ChIJtwn2EK7iEogRHR4eOO1RvQU
 2026-08-25 17:35:07,chick-fil-a-frieda-parker,Chick-fil-A (Frieda Parker Hall),,no_matching_result,,
+2026-08-25 17:40:38,wiley-dining-court,Wiley Dining Court,,unverified_identifier_candidate:live_busyness_unavailable,ChIJCaIHWLHiEogRZlqMXbheH1Y,https://www.google.com/maps/search/?api=1&query=Wiley%20Dining%20Court&query_place_id=ChIJCaIHWLHiEogRZlqMXbheH1Y
+2026-08-25 17:40:38,earhart-dining-court,Earhart Dining Court,,unverified_identifier_candidate:live_busyness_unavailable,ChIJkXgMmNv9EogRWox1kl6YMb4,https://www.google.com/maps/search/?api=1&query=Earhart%20Dining%20Court&query_place_id=ChIJkXgMmNv9EogRWox1kl6YMb4
+2026-08-25 17:40:38,ford-dining-court,Ford Dining Court,44,unverified_identifier_candidate,ChIJd0HbJkv9EogRJDldtOaaPy8,https://www.google.com/maps/search/?api=1&query=Ford%20Dining%20Court&query_place_id=ChIJd0HbJkv9EogRJDldtOaaPy8
+2026-08-25 17:40:38,windsor-dining-court,Windsor Dining Court,,unverified_identifier_candidate:live_busyness_unavailable,ChIJy8hmwbXiEogRxGe1llybuMY,https://www.google.com/maps/search/?api=1&query=Windsor%20Dining%20Court&query_place_id=ChIJy8hmwbXiEogRxGe1llybuMY
+2026-08-25 17:40:38,hillenbrand-dining-court,Hillenbrand Dining Court,,unverified_identifier_candidate:live_busyness_unavailable,ChIJiyNb78viEogRkKqxdDwgyPY,https://www.google.com/maps/search/?api=1&query=Hillenbrand%20Dining%20Court&query_place_id=ChIJiyNb78viEogRkKqxdDwgyPY
+2026-08-25 17:40:38,bechtel-innovation-design-center,Bechtel Innovation Design Center (BIDC),,no_matching_result,,
+2026-08-25 17:40:38,corec,France A. Córdova Recreational Sports Center (CoRec),,no_matching_result,,
+2026-08-25 17:40:38,pmu-food-court,Purdue Memorial Union (PMU) Food Court,,unverified_identifier_candidate:live_busyness_unavailable,ChIJtwn2EK7iEogRHR4eOO1RvQU,https://www.google.com/maps/search/?api=1&query=Purdue%20Memorial%20Union&query_place_id=ChIJtwn2EK7iEogRHR4eOO1RvQU
+2026-08-25 17:40:38,chick-fil-a-frieda-parker,Chick-fil-A (Frieda Parker Hall),,no_matching_result,,
