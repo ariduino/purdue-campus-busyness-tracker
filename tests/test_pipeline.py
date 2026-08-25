@@ -86,6 +86,21 @@ class PipelineTests(unittest.TestCase):
         with self.assertRaises(pipeline.ConfigurationError):
             pipeline.select_locations(self.config["locations"], "not-a-location")
 
+    def test_accented_name_and_address_suffix_normalize_for_corec(self):
+        location = next(item for item in self.config["locations"] if item["id"] == "corec")
+        result = {
+            "placeName": "France A. Córdova Recreational Sports Center",
+            "placeAddress": "355 N Martin Jischke Dr, West Lafayette, IN 47907",
+        }
+        self.assertTrue(pipeline.bootstrap_matches(location, result))
+
+    def test_chick_fil_a_accepts_only_configured_address_variants(self):
+        location = next(item for item in self.config["locations"] if item["id"] == "chick-fil-a-frieda-parker")
+        good_result = {"placeName": "Chick-fil-A at Purdue University", "placeAddress": "1196 3rd Street, West Lafayette, IN"}
+        wrong_result = {"placeName": "Chick-fil-A at Purdue University", "placeAddress": "200 Main Street, West Lafayette, IN"}
+        self.assertTrue(pipeline.bootstrap_matches(location, good_result))
+        self.assertFalse(pipeline.bootstrap_matches(location, wrong_result))
+
     def test_csv_is_created_once_with_headers(self):
         rows = [{field: "" for field in pipeline.CSV_FIELDS}]
         with tempfile.TemporaryDirectory() as directory:

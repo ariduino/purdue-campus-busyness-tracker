@@ -14,6 +14,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from datetime import datetime, time
 from pathlib import Path
 from typing import Any
@@ -102,8 +103,15 @@ def validate_config(config: dict[str, Any]) -> None:
         if not isinstance(location.get("address_hint"), str) or not location["address_hint"].strip():
             raise ConfigurationError(f"Location {location_id} needs an address_hint")
         tokens = location.get("address_match_tokens")
-        if not isinstance(tokens, list) or not tokens or not all(isinstance(token, str) and token.strip() for token in tokens):
-            raise ConfigurationError(f"Location {location_id} needs address_match_tokens")
+        variants = location.get("address_match_variants")
+        tokens_valid = isinstance(tokens, list) and bool(tokens) and all(isinstance(token, str) and token.strip() for token in tokens)
+        variants_valid = (
+            isinstance(variants, list)
+            and bool(variants)
+            and all(isinstance(variant, list) and variant and all(isinstance(token, str) and token.strip() for token in variant) for variant in variants)
+        )
+        if not tokens_valid and not variants_valid:
+            raise ConfigurationError(f"Location {location_id} needs address_match_tokens or address_match_variants")
 
 
 def validate_registry(registry: dict[str, Any], config: dict[str, Any]) -> None:
@@ -130,7 +138,8 @@ def is_active(now: datetime, config: dict[str, Any]) -> bool:
 
 
 def normalized_text(value: Any) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", unquote(str(value or "")).lower()).strip()
+    ascii_value = unicodedata.normalize("NFKD", unquote(str(value or ""))).encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]+", " ", ascii_value.lower()).strip()
 
 
 def normalized_url(value: Any) -> str:
@@ -205,8 +214,10 @@ def bootstrap_matches(location: dict[str, Any], item: dict[str, Any]) -> bool:
     result_name = normalized_text(first_value(item, NAME_FIELDS))
     expected_names = {normalized_text(location["name"]), *(normalized_text(name) for name in location["match_names"])}
     address = normalized_text(first_value(item, ADDRESS_FIELDS))
-    required_tokens = [normalized_text(token) for token in location["address_match_tokens"]]
-    return result_name in expected_names and bool(address) and all(token in address for token in required_tokens)
+    token_variants = location.get("address_match_variants") or [location["address_match_tokens"]]
+    normalized_variants = [[normalized_text(token) for token in variant] for variant in token_variants]
+    address_matches = any(all(token in address for token in variant) for variant in normalized_variants)
+    return result_name in expected_names and bool(address) and address_matches
 
 
 def resolve_location(location: dict[str, Any], registry_entry: dict[str, Any], items: list[dict[str, Any]]) -> tuple[dict[str, Any] | None, str]:

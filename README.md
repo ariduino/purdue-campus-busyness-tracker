@@ -12,7 +12,7 @@ An automated collector for live Google Maps busyness readings at selected Purdue
 
 ## Identity model
 
-- `config.json` `id`: permanent internal ID for one tracked facility. Its `search_query`, `location_query`, accepted `match_names`, and address tokens are the carefully constrained bootstrap data.
+- `config.json` `id`: permanent internal ID for one tracked facility. Its `search_query`, `location_query`, accepted `match_names`, and address token(s) or address variants are the carefully constrained bootstrap data.
 - `location_registry.json` `google_place_id`: Google identifier confirmed after review.
 - URL: request/bootstrap fallback only. It is not trusted as the primary identity after registration.
 
