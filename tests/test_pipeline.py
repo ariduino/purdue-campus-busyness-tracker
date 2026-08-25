@@ -33,7 +33,12 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(status, "matched_google_place_id")
 
     def test_compass_actor_input_uses_precise_searches_fallbacks_and_detail_pages(self):
-        actor_input = pipeline.build_actor_input(self.config["locations"][:2], self.registry)
+        locations = self.config["locations"][:2]
+        unresolved_registry = {"locations": {
+            location["id"]: {"google_place_id": None, "canonical_url": None}
+            for location in locations
+        }}
+        actor_input = pipeline.build_actor_input(locations, unresolved_registry)
         self.assertEqual(actor_input["searchStringsArray"], [item["search_query"] for item in self.config["locations"][:2]])
         self.assertEqual(actor_input["locationQuery"], "West Lafayette, IN")
         self.assertEqual(actor_input["maxCrawledPlacesPerSearch"], 3)
@@ -45,7 +50,11 @@ class PipelineTests(unittest.TestCase):
 
     def test_actor_input_includes_configured_fallback_queries_once(self):
         locations = [item for item in self.config["locations"] if item["id"] in {"bechtel-innovation-design-center", "corec"}]
-        actor_input = pipeline.build_actor_input(locations, self.registry)
+        unresolved_registry = {"locations": {
+            location["id"]: {"google_place_id": None, "canonical_url": None}
+            for location in locations
+        }}
+        actor_input = pipeline.build_actor_input(locations, unresolved_registry)
         self.assertEqual(actor_input["searchStringsArray"], [
             "Bechtel Innovation Design Center 1090 Third Street West Lafayette",
             "Bechtel Innovation Design Center Purdue University",
