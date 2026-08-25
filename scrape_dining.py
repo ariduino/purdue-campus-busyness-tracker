@@ -238,18 +238,22 @@ def build_rows(now: datetime, locations: list[dict[str, Any]], registry: dict[st
     return rows, discoveries
 
 
-def error_rows(now: datetime, locations: list[dict[str, Any]], reason: str) -> list[dict[str, str]]:
-    """Preserve an observable collection attempt when the remote actor is unavailable."""
+def status_rows(now: datetime, locations: list[dict[str, Any]], status: str) -> list[dict[str, str]]:
+    """Preserve an observable collection attempt when no usable result is available."""
     timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
     return [{
         "Timestamp_EST": timestamp,
         "Location_ID": location["id"],
         "Location_Name": location["name"],
         "Current_Busyness_Pct": "",
-        "Source_Status": f"actor_error:{reason}",
+        "Source_Status": status,
         "Google_Place_ID": "",
         "Source_URL": "",
     } for location in locations]
+
+
+def error_rows(now: datetime, locations: list[dict[str, Any]], reason: str) -> list[dict[str, str]]:
+    return status_rows(now, locations, f"actor_error:{reason}")
 
 
 def weekly_csv_path(now: datetime) -> Path:
@@ -265,6 +269,22 @@ def append_rows(path: Path, rows: list[dict[str, str]]) -> None:
         if not exists:
             writer.writeheader()
         writer.writerows(rows)
+
+
+def log_actor_diagnostics(items: list[dict[str, Any]]) -> None:
+    """Log a deliberately small public metadata projection for matching diagnosis."""
+    print(f"Apify result count: {len(items)}")
+    for index, item in enumerate(items[:20], start=1):
+        summary = {
+            "place_id": candidate_place_id(item),
+            "name": first_value(item, NAME_FIELDS),
+            "address": first_value(item, ADDRESS_FIELDS),
+            "url": candidate_url(item),
+            "busyness_pct": candidate_busyness(item),
+        }
+        print(f"Apify result {index}: {json.dumps(summary, ensure_ascii=False)}")
+    if len(items) > 20:
+        print(f"Apify result diagnostics truncated: {len(items) - 20} additional records.")
 
 
 def persist_discoveries(registry: dict[str, Any], discoveries: dict[str, dict[str, str]]) -> bool:
@@ -321,7 +341,11 @@ def main(argv: list[str] | None = None) -> int:
             rows, discoveries = error_rows(now, config["locations"], str(error)), {}
             print("Writing unavailable rows so this remote failure is visible in the historical dataset.", file=sys.stderr)
         else:
-            rows, discoveries = build_rows(now, config["locations"], registry, items)
+            log_actor_diagnostics(items)
+            if not items:
+                rows, discoveries = status_rows(now, config["locations"], "actor_returned_zero_results"), {}
+            else:
+                rows, discoveries = build_rows(now, config["locations"], registry, items)
         append_rows(weekly_csv_path(now), rows)
         if discoveries:
             print("Discovered unverified Google identifiers: " + ", ".join(sorted(discoveries)))

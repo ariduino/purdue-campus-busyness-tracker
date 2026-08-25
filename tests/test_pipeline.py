@@ -65,6 +65,11 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(rows[0]["Current_Busyness_Pct"], "")
         self.assertEqual(rows[1]["Source_Status"], "actor_error:TimeoutError")
 
+    def test_zero_result_status_rows_are_distinct_from_actor_failure(self):
+        now = datetime(2026, 8, 25, 12, 0, tzinfo=pipeline.TIMEZONE)
+        rows = pipeline.status_rows(now, self.config["locations"][:1], "actor_returned_zero_results")
+        self.assertEqual(rows[0]["Source_Status"], "actor_returned_zero_results")
+
     def test_csv_is_created_once_with_headers(self):
         rows = [{field: "" for field in pipeline.CSV_FIELDS}]
         with tempfile.TemporaryDirectory() as directory:
