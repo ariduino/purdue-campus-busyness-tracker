@@ -95,6 +95,9 @@ def validate_config(config: dict[str, Any]) -> None:
             raise ConfigurationError(f"Location {location_id} has an invalid optional URL")
         if not isinstance(location.get("search_query"), str) or not location["search_query"].strip():
             raise ConfigurationError(f"Location {location_id} needs a search_query")
+        fallback_queries = location.get("fallback_search_queries", [])
+        if not isinstance(fallback_queries, list) or not all(isinstance(query, str) and query.strip() for query in fallback_queries):
+            raise ConfigurationError(f"Location {location_id} has invalid fallback_search_queries")
         if not isinstance(location.get("location_query"), str) or not location["location_query"].strip():
             raise ConfigurationError(f"Location {location_id} needs a location_query")
         match_names = location.get("match_names")
@@ -178,15 +181,23 @@ def candidate_busyness(item: dict[str, Any]) -> int | None:
 
 
 def build_actor_input(locations: list[dict[str, Any]]) -> dict[str, Any]:
-    """Search exact facilities in one city before their stable IDs have been captured."""
+    """Search facilities and their configured fallbacks before IDs are captured."""
     location_queries = {location["location_query"] for location in locations}
     if len(location_queries) != 1:
         raise ConfigurationError("A Compass run can use only one location_query")
+    search_strings = list(dict.fromkeys(
+        query
+        for location in locations
+        for query in [location["search_query"], *location.get("fallback_search_queries", [])]
+    ))
     return {
-        "searchStringsArray": [location["search_query"] for location in locations],
+        "searchStringsArray": search_strings,
         "locationQuery": location_queries.pop(),
-        "maxCrawledPlacesPerSearch": 1,
-        "searchMatching": "only_includes",
+        # Local name/address checks remain the authority for identity.  Asking
+        # Compass for several candidates lets names that Google abbreviates or
+        # formats differently still reach those conservative checks.
+        "maxCrawledPlacesPerSearch": 3,
+        "searchMatching": "all",
         "language": "en",
         "scrapePlaceDetailPage": True,
         "maxReviews": 0,

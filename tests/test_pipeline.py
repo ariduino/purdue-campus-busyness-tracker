@@ -32,16 +32,27 @@ class PipelineTests(unittest.TestCase):
         self.assertIs(resolved, item)
         self.assertEqual(status, "matched_google_place_id")
 
-    def test_compass_actor_input_uses_precise_searches_and_detail_pages(self):
+    def test_compass_actor_input_uses_precise_searches_fallbacks_and_detail_pages(self):
         actor_input = pipeline.build_actor_input(self.config["locations"][:2])
         self.assertEqual(actor_input["searchStringsArray"], [item["search_query"] for item in self.config["locations"][:2]])
         self.assertEqual(actor_input["locationQuery"], "West Lafayette, IN")
-        self.assertEqual(actor_input["maxCrawledPlacesPerSearch"], 1)
-        self.assertEqual(actor_input["searchMatching"], "only_includes")
+        self.assertEqual(actor_input["maxCrawledPlacesPerSearch"], 3)
+        self.assertEqual(actor_input["searchMatching"], "all")
         self.assertTrue(actor_input["scrapePlaceDetailPage"])
         self.assertFalse(actor_input["scrapeReviewsPersonalData"])
         self.assertEqual(actor_input["language"], "en")
         self.assertNotIn("startUrls", actor_input)
+
+    def test_actor_input_includes_configured_fallback_queries_once(self):
+        locations = [item for item in self.config["locations"] if item["id"] in {"bechtel-innovation-design-center", "corec"}]
+        actor_input = pipeline.build_actor_input(locations)
+        self.assertEqual(actor_input["searchStringsArray"], [
+            "Bechtel Innovation Design Center Purdue University",
+            "Bechtel Center Purdue University",
+            "BIDC Purdue University",
+            "Purdue CoRec",
+            "France A Cordova Recreational Sports Center Purdue University",
+        ])
 
     def test_actor_error_redacts_a_token(self):
         message = pipeline.safe_actor_error(RuntimeError("token=secret-value request rejected"))
