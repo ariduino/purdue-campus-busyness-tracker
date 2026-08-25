@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "locations": {
+    "wiley-dining-court": {"google_place_id": null, "canonical_url": null},
+    "earhart-dining-court": {"google_place_id": null, "canonical_url": null},
+    "ford-dining-court": {"google_place_id": null, "canonical_url": null},
+    "windsor-dining-court": {"google_place_id": null, "canonical_url": null},
+    "hillenbrand-dining-court": {"google_place_id": null, "canonical_url": null},
+    "bechtel-innovation-design-center": {"google_place_id": null, "canonical_url": null},
+    "corec": {"google_place_id": null, "canonical_url": null},
+    "pmu-food-court": {"google_place_id": null, "canonical_url": null},
+    "chick-fil-a-frieda-parker": {"google_place_id": null, "canonical_url": null}
+  }
+}
+

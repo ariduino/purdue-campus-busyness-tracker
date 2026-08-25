@@ -1,0 +1,43 @@
+name: Collect Purdue campus busyness
+
+on:
+  schedule:
+    - cron: "0 */2 * * *"
+  workflow_dispatch:
+    inputs:
+      accept_identifiers:
+        description: "Save strict, reviewed Google ID discoveries to location_registry.json"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: purdue-busyness-collector
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Collect busyness data
+        env:
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+        run: >-
+          python scrape_dining.py
+          ${{ inputs.accept_identifiers && '--accept-discovered-identifiers' || '' }}
+      - name: Commit collected data
+        run: |
+          git config user.name "Purdue Busyness Bot"
+          git config user.email "actions@github.com"
+          git add data/ location_registry.json
+          git diff --cached --quiet || git commit -m "Automated busyness collection"
+          git push

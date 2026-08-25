@@ -1,0 +1,16 @@
+{
+  "start_time_est": "07:00",
+  "end_time_est": "21:00",
+  "locations": [
+    {"id": "wiley-dining-court", "name": "Wiley Dining Court", "url": "https://www.google.com/maps/place/Wiley+Dining+Court/", "address_hint": "Purdue University, West Lafayette, IN"},
+    {"id": "earhart-dining-court", "name": "Earhart Dining Court", "url": "https://www.google.com/maps/place/Earhart+Dining+Court/", "address_hint": "Purdue University, West Lafayette, IN"},
+    {"id": "ford-dining-court", "name": "Ford Dining Court", "url": "https://www.google.com/maps/place/Ford+Dining+Court/", "address_hint": "Purdue University, West Lafayette, IN"},
+    {"id": "windsor-dining-court", "name": "Windsor Dining Court", "url": "https://www.google.com/maps/place/Windsor+Dining+Court/", "address_hint": "Purdue University, West Lafayette, IN"},
+    {"id": "hillenbrand-dining-court", "name": "Hillenbrand Dining Court", "url": "https://www.google.com/maps/place/Hillenbrand+Dining+Court/", "address_hint": "Purdue University, West Lafayette, IN"},
+    {"id": "bechtel-innovation-design-center", "name": "Bechtel Innovation Design Center (BIDC)", "url": "https://www.google.com/maps/place/Bechtel+Innovation+Design+Center/", "address_hint": "Purdue University, West Lafayette, IN"},
+    {"id": "corec", "name": "France A. Córdova Recreational Sports Center (CoRec)", "url": "https://www.google.com/maps/place/France+A.+C%C3%B3rdova+Recreational+Sports+Center/", "address_hint": "Purdue University, West Lafayette, IN"},
+    {"id": "pmu-food-court", "name": "Purdue Memorial Union (PMU) Food Court", "url": "https://www.google.com/maps/place/Purdue+Memorial+Union/", "address_hint": "Purdue University, West Lafayette, IN"},
+    {"id": "chick-fil-a-frieda-parker", "name": "Chick-fil-A (Frieda Parker Hall)", "url": "https://www.google.com/maps/place/Chick-fil-A+at+Purdue/", "address_hint": "Purdue University, West Lafayette, IN"}
+  ]
+}
+
