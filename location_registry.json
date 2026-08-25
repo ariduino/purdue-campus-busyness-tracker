@@ -1,15 +1,41 @@
 {
   "version": 1,
   "locations": {
-    "wiley-dining-court": {"google_place_id": null, "canonical_url": null},
-    "earhart-dining-court": {"google_place_id": null, "canonical_url": null},
-    "ford-dining-court": {"google_place_id": null, "canonical_url": null},
-    "windsor-dining-court": {"google_place_id": null, "canonical_url": null},
-    "hillenbrand-dining-court": {"google_place_id": null, "canonical_url": null},
-    "bechtel-innovation-design-center": {"google_place_id": null, "canonical_url": null},
-    "corec": {"google_place_id": null, "canonical_url": null},
-    "pmu-food-court": {"google_place_id": null, "canonical_url": null},
-    "chick-fil-a-frieda-parker": {"google_place_id": null, "canonical_url": null}
+    "wiley-dining-court": {
+      "google_place_id": "ChIJCaIHWLHiEogRZlqMXbheH1Y",
+      "canonical_url": "https://www.google.com/maps/search/?api=1&query=Wiley%20Dining%20Court&query_place_id=ChIJCaIHWLHiEogRZlqMXbheH1Y"
+    },
+    "earhart-dining-court": {
+      "google_place_id": "ChIJkXgMmNv9EogRWox1kl6YMb4",
+      "canonical_url": "https://www.google.com/maps/search/?api=1&query=Earhart%20Dining%20Court&query_place_id=ChIJkXgMmNv9EogRWox1kl6YMb4"
+    },
+    "ford-dining-court": {
+      "google_place_id": "ChIJd0HbJkv9EogRJDldtOaaPy8",
+      "canonical_url": "https://www.google.com/maps/search/?api=1&query=Ford%20Dining%20Court&query_place_id=ChIJd0HbJkv9EogRJDldtOaaPy8"
+    },
+    "windsor-dining-court": {
+      "google_place_id": "ChIJy8hmwbXiEogRxGe1llybuMY",
+      "canonical_url": "https://www.google.com/maps/search/?api=1&query=Windsor%20Dining%20Court&query_place_id=ChIJy8hmwbXiEogRxGe1llybuMY"
+    },
+    "hillenbrand-dining-court": {
+      "google_place_id": "ChIJiyNb78viEogRkKqxdDwgyPY",
+      "canonical_url": "https://www.google.com/maps/search/?api=1&query=Hillenbrand%20Dining%20Court&query_place_id=ChIJiyNb78viEogRkKqxdDwgyPY"
+    },
+    "bechtel-innovation-design-center": {
+      "google_place_id": null,
+      "canonical_url": null
+    },
+    "corec": {
+      "google_place_id": "ChIJc3NYhLXiEogRzh1avYzXIBc",
+      "canonical_url": "https://www.google.com/maps/search/?api=1&query=France%20A.%20C%C3%B3rdova%20Recreational%20Sports%20Center&query_place_id=ChIJc3NYhLXiEogRzh1avYzXIBc"
+    },
+    "pmu-food-court": {
+      "google_place_id": "ChIJtwn2EK7iEogRHR4eOO1RvQU",
+      "canonical_url": "https://www.google.com/maps/search/?api=1&query=Purdue%20Memorial%20Union&query_place_id=ChIJtwn2EK7iEogRHR4eOO1RvQU"
+    },
+    "chick-fil-a-frieda-parker": {
+      "google_place_id": "ChIJ_-Ge5SLjEogR5cEpUISuVFo",
+      "canonical_url": "https://www.google.com/maps/search/?api=1&query=Chick-fil-A&query_place_id=ChIJ_-Ge5SLjEogR5cEpUISuVFo"
+    }
   }
 }
-
