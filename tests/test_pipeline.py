@@ -32,6 +32,18 @@ class PipelineTests(unittest.TestCase):
         self.assertIs(resolved, item)
         self.assertEqual(status, "matched_google_place_id")
 
+    def test_current_actor_input_uses_only_documented_place_urls(self):
+        actor_input = pipeline.build_actor_input(self.config["locations"][:2])
+        self.assertEqual(actor_input["placeUrls"], [item["url"] for item in self.config["locations"][:2]])
+        self.assertEqual(actor_input["language"], "en")
+        self.assertEqual(actor_input["country"], "us")
+        self.assertNotIn("startUrls", actor_input)
+
+    def test_actor_error_redacts_a_token(self):
+        message = pipeline.safe_actor_error(RuntimeError("token=secret-value request rejected"))
+        self.assertNotIn("secret-value", message)
+        self.assertIn("[REDACTED]", message)
+
     def test_bootstrap_is_strict_and_discovery_needs_approval(self):
         location = self.config["locations"][0]
         item = {"placeId": "new-google-id", "url": location["url"], "currentBusynessPct": 52}

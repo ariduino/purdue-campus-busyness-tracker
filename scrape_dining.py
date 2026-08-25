@@ -25,6 +25,7 @@ CONFIG_PATH = ROOT / "config.json"
 REGISTRY_PATH = ROOT / "location_registry.json"
 DATA_DIR = ROOT / "data"
 TIMEZONE = ZoneInfo("America/Indiana/Indianapolis")
+ACTOR_ID = "seemuapps/google-maps-popular-times-scraper"
 CSV_FIELDS = [
     "Timestamp_EST",
     "Location_ID",
@@ -157,6 +158,24 @@ def candidate_busyness(item: dict[str, Any]) -> int | None:
     return None
 
 
+def build_actor_input(locations: list[dict[str, Any]]) -> dict[str, Any]:
+    """Minimal input supported by the dedicated live-busyness actor."""
+    return {
+        "placeUrls": [location["url"] for location in locations],
+        "language": "en",
+        "country": "us",
+    }
+
+
+def safe_actor_error(error: Exception) -> str:
+    """Keep Action diagnostics useful while preventing accidental token disclosure."""
+    message = str(error)
+    message = re.sub(r"(?i)(token|api[_-]?key|authorization)(=|:|%3D)[^\s&]+", r"\1\2[REDACTED]", message)
+    status_code = getattr(error, "status_code", None)
+    prefix = f"HTTP {status_code}: " if status_code else ""
+    return (prefix + message).strip() or type(error).__name__
+
+
 def bootstrap_matches(location: dict[str, Any], item: dict[str, Any]) -> bool:
     """Allow discovery only for one strict, reviewable URL/name/address match."""
     result_url = candidate_url(item)
@@ -265,19 +284,10 @@ def call_actor(locations: list[dict[str, Any]]) -> list[dict[str, Any]]:
         from apify_client import ApifyClient
     except ImportError as error:
         raise RuntimeError("apify-client is not installed; run pip install -r requirements.txt") from error
-    # Verify these minimal input keys against the selected actor's live schema before first production run.
-    run_input = {
-        "startUrls": [{"url": location["url"]} for location in locations],
-        "maxCrawledPlaces": len(locations),
-        "scrapePopularTimes": True,
-        "maxReviews": 0,
-        "maxImages": 0,
-        "personalData": False,
-        "allPlacesNoSearch": True,
-    }
+    run_input = build_actor_input(locations)
     try:
         client = ApifyClient(token)
-        run = client.actor("apify/google-maps-scraper").call(run_input=run_input)
+        run = client.actor(ACTOR_ID).call(run_input=run_input)
         if run is None:
             raise ActorExecutionError("actor_returned_no_run")
         dataset_id = getattr(run, "default_dataset_id", None) or run.get("defaultDatasetId")
@@ -287,8 +297,8 @@ def call_actor(locations: list[dict[str, Any]]) -> list[dict[str, Any]]:
     except ActorExecutionError:
         raise
     except Exception as error:
-        # Do not include an exception string: it could contain URL or provider details.
-        print(f"Apify collection failed: {type(error).__name__}", file=sys.stderr)
+        detail = safe_actor_error(error)
+        print(f"Apify collection failed for {ACTOR_ID}: {detail}", file=sys.stderr)
         raise ActorExecutionError(type(error).__name__) from error
 
 
