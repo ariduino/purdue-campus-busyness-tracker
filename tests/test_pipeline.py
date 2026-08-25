@@ -33,7 +33,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(status, "matched_google_place_id")
 
     def test_compass_actor_input_uses_precise_searches_fallbacks_and_detail_pages(self):
-        actor_input = pipeline.build_actor_input(self.config["locations"][:2])
+        actor_input = pipeline.build_actor_input(self.config["locations"][:2], self.registry)
         self.assertEqual(actor_input["searchStringsArray"], [item["search_query"] for item in self.config["locations"][:2]])
         self.assertEqual(actor_input["locationQuery"], "West Lafayette, IN")
         self.assertEqual(actor_input["maxCrawledPlacesPerSearch"], 3)
@@ -45,14 +45,34 @@ class PipelineTests(unittest.TestCase):
 
     def test_actor_input_includes_configured_fallback_queries_once(self):
         locations = [item for item in self.config["locations"] if item["id"] in {"bechtel-innovation-design-center", "corec"}]
-        actor_input = pipeline.build_actor_input(locations)
+        actor_input = pipeline.build_actor_input(locations, self.registry)
         self.assertEqual(actor_input["searchStringsArray"], [
+            "Bechtel Innovation Design Center 1090 Third Street West Lafayette",
             "Bechtel Innovation Design Center Purdue University",
             "Bechtel Center Purdue University",
             "BIDC Purdue University",
             "Purdue CoRec",
             "France A Cordova Recreational Sports Center Purdue University",
         ])
+
+    def test_actor_input_uses_saved_ids_and_searches_only_unresolved_locations(self):
+        locations = self.config["locations"][:2]
+        registry = {"locations": {
+            locations[0]["id"]: {"google_place_id": "saved-id", "canonical_url": None},
+            locations[1]["id"]: {"google_place_id": None, "canonical_url": None},
+        }}
+        actor_input = pipeline.build_actor_input(locations, registry)
+        self.assertEqual(actor_input["placeIds"], ["saved-id"])
+        self.assertEqual(actor_input["searchStringsArray"], [locations[1]["search_query"]])
+        self.assertEqual(actor_input["locationQuery"], "West Lafayette, IN")
+
+    def test_actor_input_with_only_saved_ids_has_no_search_parameters(self):
+        location = self.config["locations"][0]
+        registry = {"locations": {location["id"]: {"google_place_id": "saved-id", "canonical_url": None}}}
+        actor_input = pipeline.build_actor_input([location], registry)
+        self.assertEqual(actor_input["placeIds"], ["saved-id"])
+        self.assertNotIn("searchStringsArray", actor_input)
+        self.assertNotIn("locationQuery", actor_input)
 
     def test_actor_error_redacts_a_token(self):
         message = pipeline.safe_actor_error(RuntimeError("token=secret-value request rejected"))

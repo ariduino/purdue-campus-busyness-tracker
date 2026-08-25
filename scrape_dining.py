@@ -180,22 +180,25 @@ def candidate_busyness(item: dict[str, Any]) -> int | None:
     return None
 
 
-def build_actor_input(locations: list[dict[str, Any]]) -> dict[str, Any]:
-    """Search facilities and their configured fallbacks before IDs are captured."""
+def build_actor_input(locations: list[dict[str, Any]], registry: dict[str, Any]) -> dict[str, Any]:
+    """Scrape saved Google IDs directly and search only locations still unresolved."""
     location_queries = {location["location_query"] for location in locations}
     if len(location_queries) != 1:
         raise ConfigurationError("A Compass run can use only one location_query")
     search_strings = list(dict.fromkeys(
         query
         for location in locations
+        if not registry["locations"][location["id"]].get("google_place_id")
         for query in [location["search_query"], *location.get("fallback_search_queries", [])]
     ))
-    return {
-        "searchStringsArray": search_strings,
-        "locationQuery": location_queries.pop(),
-        # Local name/address checks remain the authority for identity.  Asking
-        # Compass for several candidates lets names that Google abbreviates or
-        # formats differently still reach those conservative checks.
+    place_ids = list(dict.fromkeys(
+        registry["locations"][location["id"]]["google_place_id"]
+        for location in locations
+        if registry["locations"][location["id"]].get("google_place_id")
+    ))
+    actor_input = {
+        # Local name/address checks remain the authority for unresolved
+        # locations. Multiple candidates handle Google name formatting.
         "maxCrawledPlacesPerSearch": 3,
         "searchMatching": "all",
         "language": "en",
@@ -205,6 +208,12 @@ def build_actor_input(locations: list[dict[str, Any]]) -> dict[str, Any]:
         "scrapeReviewsPersonalData": False,
         "scrapeContacts": False,
     }
+    if place_ids:
+        actor_input["placeIds"] = place_ids
+    if search_strings:
+        actor_input["searchStringsArray"] = search_strings
+        actor_input["locationQuery"] = location_queries.pop()
+    return actor_input
 
 
 def safe_actor_error(error: Exception) -> str:
@@ -340,7 +349,7 @@ def persist_discoveries(registry: dict[str, Any], discoveries: dict[str, dict[st
     return True
 
 
-def call_actor(locations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def call_actor(locations: list[dict[str, Any]], registry: dict[str, Any]) -> list[dict[str, Any]]:
     token = os.environ.get("APIFY_API_TOKEN")
     if not token:
         raise RuntimeError("APIFY_API_TOKEN is not defined")
@@ -348,7 +357,7 @@ def call_actor(locations: list[dict[str, Any]]) -> list[dict[str, Any]]:
         from apify_client import ApifyClient
     except ImportError as error:
         raise RuntimeError("apify-client is not installed; run pip install -r requirements.txt") from error
-    run_input = build_actor_input(locations)
+    run_input = build_actor_input(locations, registry)
     try:
         client = ApifyClient(token)
         run = client.actor(ACTOR_ID).call(run_input=run_input)
@@ -391,7 +400,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Outside active tracking hours at {now.isoformat()}; exiting successfully.")
             return 0
         try:
-            items = call_actor(locations)
+            items = call_actor(locations, registry)
         except ActorExecutionError as error:
             rows, discoveries = error_rows(now, locations, str(error)), {}
             print("Writing unavailable rows so this remote failure is visible in the historical dataset.", file=sys.stderr)
